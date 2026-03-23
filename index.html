@@ -1,0 +1,1162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Chladni — Vibration Pattern Explorer</title>
+<style>
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --bg: #1A0D00;
+    --bg2: #241200;
+    --gold: #DDC165;
+    --gold-bright: #FFE9A3;
+    --orange: #E5591C;
+    --panel-bg: rgba(26, 13, 0, 0.94);
+    --border: rgba(221, 193, 101, 0.18);
+    --text: #DDC165;
+    --text-dim: rgba(221, 193, 101, 0.5);
+    --slider-track: rgba(221, 193, 101, 0.12);
+    --slider-fill: #DDC165;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+    overflow: hidden;
+    height: 100dvh;
+    width: 100vw;
+    touch-action: none;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
+  canvas {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+  }
+
+  #fieldCanvas { z-index: 1; }
+  #particleCanvas { z-index: 2; }
+
+  .panel {
+    position: fixed;
+    top: 12px;
+    right: 12px;
+    z-index: 10;
+    background: var(--panel-bg);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+    width: 260px;
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    box-shadow: 0 8px 32px rgba(0,0,0,0.6);
+    max-height: calc(100dvh - 24px);
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(221,193,101,0.2) transparent;
+  }
+
+  .panel::-webkit-scrollbar { width: 4px; }
+  .panel::-webkit-scrollbar-thumb { background: rgba(221,193,101,0.2); border-radius: 2px; }
+
+  .panel h1 {
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    margin-bottom: 4px;
+    color: var(--gold-bright);
+  }
+
+  .panel .subtitle {
+    font-size: 10px;
+    color: var(--text-dim);
+    margin-bottom: 14px;
+    line-height: 1.4;
+  }
+
+  .section-label {
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 1.2px;
+    color: var(--text-dim);
+    margin: 12px 0 6px;
+  }
+
+  .slider-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 6px;
+  }
+
+  .slider-row label {
+    font-size: 11px;
+    min-width: 24px;
+    flex-shrink: 0;
+  }
+
+  .slider-row input[type="range"] {
+    flex: 1;
+    -webkit-appearance: none;
+    appearance: none;
+    height: 4px;
+    background: var(--slider-track);
+    border-radius: 2px;
+    outline: none;
+  }
+
+  .slider-row input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: var(--gold);
+    cursor: pointer;
+    box-shadow: 0 0 6px rgba(221,193,101,0.4);
+  }
+
+  .slider-row .val {
+    font-size: 10px;
+    min-width: 28px;
+    text-align: right;
+    color: var(--gold-bright);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .presets {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 4px;
+    margin-bottom: 8px;
+  }
+
+  .preset-btn {
+    background: rgba(221,193,101,0.06);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text);
+    font-family: inherit;
+    font-size: 10px;
+    padding: 6px 4px;
+    cursor: pointer;
+    transition: all 0.15s;
+    text-align: center;
+  }
+
+  .preset-btn:hover {
+    background: rgba(221,193,101,0.14);
+    border-color: rgba(221,193,101,0.35);
+  }
+
+  .preset-btn.active {
+    background: rgba(229,89,28,0.2);
+    border-color: var(--orange);
+    color: var(--gold-bright);
+  }
+
+  .palette-row {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 8px;
+  }
+
+  .palette-swatch {
+    width: 24px;
+    height: 24px;
+    border-radius: 6px;
+    cursor: pointer;
+    border: 2px solid transparent;
+    transition: all 0.15s;
+  }
+
+  .palette-swatch.active {
+    border-color: var(--gold-bright);
+    box-shadow: 0 0 8px rgba(221,193,101,0.4);
+  }
+
+  .btn-row {
+    display: flex;
+    gap: 6px;
+    margin-top: 8px;
+  }
+
+  .btn {
+    flex: 1;
+    background: rgba(221,193,101,0.08);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text);
+    font-family: inherit;
+    font-size: 10px;
+    padding: 7px 0;
+    cursor: pointer;
+    transition: all 0.15s;
+    text-align: center;
+  }
+
+  .btn:hover {
+    background: rgba(221,193,101,0.16);
+    border-color: rgba(221,193,101,0.35);
+  }
+
+  .toggle-btn {
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text-dim);
+    font-family: inherit;
+    font-size: 10px;
+    padding: 5px 10px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+
+  .toggle-btn.on {
+    background: rgba(229,89,28,0.2);
+    border-color: var(--orange);
+    color: var(--gold-bright);
+  }
+
+  .toggle-row {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 6px;
+  }
+
+  .info-bar {
+    position: fixed;
+    bottom: 12px;
+    left: 12px;
+    z-index: 10;
+    font-size: 10px;
+    color: var(--text-dim);
+    background: var(--panel-bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 12px;
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+  }
+
+  .info-bar span { color: var(--gold); }
+
+  .help-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    background: rgba(0,0,0,0.85);
+    display: none;
+    justify-content: center;
+    align-items: center;
+    backdrop-filter: blur(8px);
+  }
+
+  .help-overlay.visible { display: flex; }
+
+  .help-content {
+    background: var(--panel-bg);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px;
+    max-width: 420px;
+    width: 90%;
+  }
+
+  .help-content h2 {
+    font-size: 16px;
+    margin-bottom: 12px;
+    color: var(--gold-bright);
+  }
+
+  .help-content p {
+    font-size: 11px;
+    line-height: 1.6;
+    color: var(--text-dim);
+    margin-bottom: 8px;
+  }
+
+  .help-content kbd {
+    background: rgba(221,193,101,0.1);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 1px 5px;
+    font-family: inherit;
+    font-size: 10px;
+    color: var(--gold);
+  }
+
+  @media (max-width: 640px) {
+    .panel {
+      top: auto;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      width: 100%;
+      border-radius: 14px 14px 0 0;
+      max-height: 55dvh;
+      transform: translateY(calc(100% - 48px));
+      transition: transform 0.3s ease;
+    }
+    .panel.open { transform: translateY(0); }
+    .panel .drag-handle {
+      display: block;
+      width: 36px;
+      height: 4px;
+      background: rgba(221,193,101,0.3);
+      border-radius: 2px;
+      margin: -4px auto 12px;
+    }
+    .info-bar { bottom: 56px; }
+  }
+
+  @media (min-width: 641px) {
+    .panel .drag-handle { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<canvas id="fieldCanvas"></canvas>
+<canvas id="particleCanvas"></canvas>
+
+<div class="panel" id="panel">
+  <div class="drag-handle" id="dragHandle"></div>
+  <h1>Chladni Patterns</h1>
+  <div class="subtitle">Vibration modes on elastic plates — particles settle into nodal lines where displacement is zero</div>
+
+  <div class="section-label">Presets</div>
+  <div class="presets" id="presets"></div>
+
+  <div class="section-label">Mode Numbers</div>
+  <div class="slider-row">
+    <label>n</label>
+    <input type="range" id="nSlider" min="1" max="12" step="1" value="2">
+    <span class="val" id="nVal">2</span>
+  </div>
+  <div class="slider-row">
+    <label>m</label>
+    <input type="range" id="mSlider" min="1" max="12" step="1" value="5">
+    <span class="val" id="mVal">5</span>
+  </div>
+
+  <div class="section-label">Amplitude & Speed</div>
+  <div class="slider-row">
+    <label>A</label>
+    <input type="range" id="ampSlider" min="0.1" max="2" step="0.05" value="1">
+    <span class="val" id="ampVal">1.0</span>
+  </div>
+  <div class="slider-row">
+    <label>ω</label>
+    <input type="range" id="freqSlider" min="0.5" max="5" step="0.1" value="2">
+    <span class="val" id="freqVal">2.0</span>
+  </div>
+
+  <div class="section-label">Particles</div>
+  <div class="slider-row">
+    <label>#</label>
+    <input type="range" id="countSlider" min="5000" max="80000" step="1000" value="30000">
+    <span class="val" id="countVal">30K</span>
+  </div>
+  <div class="slider-row">
+    <label>F</label>
+    <input type="range" id="forceSlider" min="0.1" max="3" step="0.1" value="1">
+    <span class="val" id="forceVal">1.0</span>
+  </div>
+
+  <div class="section-label">Plate Shape</div>
+  <div class="toggle-row">
+    <button class="toggle-btn on" id="shapeSquare">Square</button>
+    <button class="toggle-btn" id="shapeCircle">Circle</button>
+  </div>
+
+  <div class="section-label">Display</div>
+  <div class="toggle-row">
+    <button class="toggle-btn on" id="toggleField">Field</button>
+    <button class="toggle-btn on" id="toggleParticles">Particles</button>
+    <button class="toggle-btn" id="toggleGlow">Glow</button>
+  </div>
+
+  <div class="section-label">Palette</div>
+  <div class="palette-row" id="palettes"></div>
+
+  <div class="btn-row">
+    <button class="btn" id="resetBtn">Reset</button>
+    <button class="btn" id="exportBtn">Export PNG</button>
+    <button class="btn" id="helpBtn">Help</button>
+  </div>
+</div>
+
+<div class="info-bar">
+  Mode (<span id="infoN">2</span>, <span id="infoM">5</span>) · <span id="infoCount">30K</span> particles · <span id="infoFPS">60</span> fps
+</div>
+
+<div class="help-overlay" id="helpOverlay">
+  <div class="help-content">
+    <h2>Chladni Patterns</h2>
+    <p>Ernst Chladni discovered that vibrating plates produce stunning geometric patterns. Sand on the plate migrates to <strong>nodal lines</strong> — regions of zero displacement — forming intricate figures.</p>
+    <p>The pattern depends on the <strong>mode numbers (n, m)</strong> which determine the vibration frequency. Higher modes produce more complex patterns.</p>
+    <p><strong>Equation:</strong> cos(nπx)cos(mπy) ± cos(mπx)cos(nπy) = 0</p>
+    <p><kbd>1</kbd>–<kbd>8</kbd> Presets · <kbd>Space</kbd> Reset · <kbd>S</kbd> Shape · <kbd>F</kbd> Field · <kbd>P</kbd> Particles · <kbd>G</kbd> Glow · <kbd>E</kbd> Export · <kbd>H</kbd>/<kbd>?</kbd> Help · <kbd>[</kbd>/<kbd>]</kbd> Palette</p>
+    <p>Click anywhere on the plate to disturb particles.</p>
+    <p style="margin-top:12px;color:var(--text-dim)">Click anywhere to close</p>
+  </div>
+</div>
+
+<script>
+'use strict';
+
+// ——— Palettes ———
+const PALETTES = [
+  { name: 'FunForrest', bg: [26,13,0], field: [[36,18,0],[90,50,8],[180,110,20],[221,193,101]], particle: [255,233,163], glow: [221,193,101] },
+  { name: 'Ember', bg: [20,5,0], field: [[40,10,0],[120,30,5],[200,70,15],[255,140,40]], particle: [255,200,80], glow: [229,89,28] },
+  { name: 'Ocean', bg: [0,8,20], field: [[0,15,40],[0,40,90],[0,80,160],[60,160,220]], particle: [140,220,255], glow: [40,140,220] },
+  { name: 'Violet', bg: [12,0,20], field: [[30,0,50],[70,10,110],[130,40,180],[200,120,255]], particle: [230,180,255], glow: [160,60,220] },
+  { name: 'Mono', bg: [10,10,10], field: [[25,25,25],[60,60,60],[120,120,120],[200,200,200]], particle: [240,240,240], glow: [180,180,180] },
+];
+
+// ——— Presets ———
+const PRESETS = [
+  { name: 'Classic', n: 2, m: 5, amp: 1, freq: 2 },
+  { name: 'Star', n: 3, m: 7, amp: 1, freq: 2 },
+  { name: 'Diamond', n: 4, m: 4, amp: 1.2, freq: 1.5 },
+  { name: 'Lattice', n: 6, m: 6, amp: 0.8, freq: 2.5 },
+  { name: 'Waves', n: 1, m: 8, amp: 1.3, freq: 1.8 },
+  { name: 'Filigree', n: 5, m: 9, amp: 0.7, freq: 3 },
+  { name: 'Bloom', n: 3, m: 3, amp: 1.5, freq: 1.2 },
+  { name: 'Chaos', n: 7, m: 11, amp: 0.6, freq: 4 },
+];
+
+// ——— State ———
+let state = {
+  n: 2, m: 5, amp: 1, freq: 2,
+  particleCount: 30000,
+  force: 1,
+  showField: true,
+  showParticles: true,
+  showGlow: false,
+  plateShape: 'square', // 'square' or 'circle'
+  paletteIdx: 0,
+  activePreset: 0,
+};
+
+let particles = [];
+let time = 0;
+let lastTime = 0;
+let frameCount = 0;
+let fpsTime = 0;
+let fps = 60;
+
+// ——— Canvas setup ———
+const fieldCanvas = document.getElementById('fieldCanvas');
+const particleCanvas = document.getElementById('particleCanvas');
+const fCtx = fieldCanvas.getContext('2d');
+const pCtx = particleCanvas.getContext('2d');
+
+let W, H, plateSize, plateX, plateY;
+
+function resize() {
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  W = window.innerWidth;
+  H = window.innerHeight;
+  fieldCanvas.width = W * dpr;
+  fieldCanvas.height = H * dpr;
+  particleCanvas.width = W * dpr;
+  particleCanvas.height = H * dpr;
+  fieldCanvas.style.width = W + 'px';
+  fieldCanvas.style.height = H + 'px';
+  particleCanvas.style.width = W + 'px';
+  particleCanvas.style.height = H + 'px';
+  fCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  pCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+  plateSize = Math.min(W, H) * 0.82;
+  plateX = (W - plateSize) / 2;
+  plateY = (H - plateSize) / 2;
+  renderField();
+}
+
+// ——— Plate clip path ———
+function clipPlate(ctx) {
+  if (state.plateShape === 'circle') {
+    ctx.beginPath();
+    ctx.arc(plateX + plateSize / 2, plateY + plateSize / 2, plateSize / 2, 0, Math.PI * 2);
+    ctx.clip();
+  } else {
+    ctx.beginPath();
+    ctx.roundRect(plateX, plateY, plateSize, plateSize, 12);
+    ctx.clip();
+  }
+}
+
+function strokePlate(ctx) {
+  if (state.plateShape === 'circle') {
+    ctx.beginPath();
+    ctx.arc(plateX + plateSize / 2, plateY + plateSize / 2, plateSize / 2, 0, Math.PI * 2);
+    ctx.stroke();
+  } else {
+    ctx.beginPath();
+    ctx.roundRect(plateX, plateY, plateSize, plateSize, 12);
+    ctx.stroke();
+  }
+}
+
+function isInsidePlate(nx, ny) {
+  if (state.plateShape === 'circle') {
+    const dx = nx - 0.5, dy = ny - 0.5;
+    return dx * dx + dy * dy <= 0.25;
+  }
+  return nx >= 0 && nx <= 1 && ny >= 0 && ny <= 1;
+}
+
+function bounceParticle(p) {
+  if (state.plateShape === 'circle') {
+    const dx = p.x - 0.5, dy = p.y - 0.5;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    if (dist > 0.5) {
+      // Reflect inward
+      const nx = dx / dist, ny2 = dy / dist;
+      p.x = 0.5 + nx * 0.499;
+      p.y = 0.5 + ny2 * 0.499;
+      // Reflect velocity
+      const dot = p.vx * nx + p.vy * ny2;
+      p.vx -= 2 * dot * nx * 0.5;
+      p.vy -= 2 * dot * ny2 * 0.5;
+    }
+  } else {
+    if (p.x < 0) { p.x = -p.x; p.vx *= -0.5; }
+    if (p.x > 1) { p.x = 2 - p.x; p.vx *= -0.5; }
+    if (p.y < 0) { p.y = -p.y; p.vy *= -0.5; }
+    if (p.y > 1) { p.y = 2 - p.y; p.vy *= -0.5; }
+  }
+}
+
+// ——— Chladni function ———
+function chladni(x, y, n, m) {
+  // x, y in [0, 1], returns displacement
+  const a = Math.cos(n * Math.PI * x) * Math.cos(m * Math.PI * y);
+  const b = Math.cos(m * Math.PI * x) * Math.cos(n * Math.PI * y);
+  return a + b;
+}
+
+function chladniGrad(x, y, n, m) {
+  // Gradient of chladni function (points toward maxima)
+  const npx = n * Math.PI;
+  const mpy = m * Math.PI;
+  const dx = -npx * Math.sin(npx * x) * Math.cos(mpy * y) - mpy * Math.sin(mpy * x) * Math.cos(npx * y);
+  const dy = -mpy * Math.cos(npx * x) * Math.sin(mpy * y) - npx * Math.cos(mpy * x) * Math.sin(npx * y);
+  return [dx, dy];
+}
+
+// ——— Field rendering ———
+let fieldImageData = null;
+
+function renderField() {
+  const pal = PALETTES[state.paletteIdx];
+  const bg = pal.bg;
+
+  fCtx.fillStyle = `rgb(${bg[0]},${bg[1]},${bg[2]})`;
+  fCtx.fillRect(0, 0, W, H);
+
+  if (!state.showField) return;
+
+  // Render plate
+  const res = Math.min(plateSize, 400);
+  const step = plateSize / res;
+  const imageData = fCtx.createImageData(Math.ceil(res), Math.ceil(res));
+  const data = imageData.data;
+
+  for (let iy = 0; iy < res; iy++) {
+    for (let ix = 0; ix < res; ix++) {
+      const x = ix / res;
+      const y = iy / res;
+      const val = chladni(x, y, state.n, state.m);
+      const absVal = Math.abs(val);
+      const norm = Math.min(absVal / 2, 1);
+
+      // Map to palette colors
+      const fc = pal.field;
+      let r, g, b;
+      if (norm < 0.33) {
+        const t = norm / 0.33;
+        r = fc[0][0] + (fc[1][0] - fc[0][0]) * t;
+        g = fc[0][1] + (fc[1][1] - fc[0][1]) * t;
+        b = fc[0][2] + (fc[1][2] - fc[0][2]) * t;
+      } else if (norm < 0.66) {
+        const t = (norm - 0.33) / 0.33;
+        r = fc[1][0] + (fc[2][0] - fc[1][0]) * t;
+        g = fc[1][1] + (fc[2][1] - fc[1][1]) * t;
+        b = fc[1][2] + (fc[2][2] - fc[1][2]) * t;
+      } else {
+        const t = (norm - 0.66) / 0.34;
+        r = fc[2][0] + (fc[3][0] - fc[2][0]) * t;
+        g = fc[2][1] + (fc[3][1] - fc[2][1]) * t;
+        b = fc[2][2] + (fc[3][2] - fc[2][2]) * t;
+      }
+
+      // Darken near nodal lines for contrast
+      const nodalFade = Math.min(absVal * 3, 1);
+      r *= 0.15 + 0.85 * nodalFade;
+      g *= 0.15 + 0.85 * nodalFade;
+      b *= 0.15 + 0.85 * nodalFade;
+
+      const idx = (iy * Math.ceil(res) + ix) * 4;
+      data[idx] = r;
+      data[idx + 1] = g;
+      data[idx + 2] = b;
+      data[idx + 3] = 255;
+    }
+  }
+
+  // Draw to offscreen canvas and scale
+  const offscreen = document.createElement('canvas');
+  offscreen.width = Math.ceil(res);
+  offscreen.height = Math.ceil(res);
+  offscreen.getContext('2d').putImageData(imageData, 0, 0);
+
+  fCtx.imageSmoothingEnabled = true;
+  fCtx.imageSmoothingQuality = 'high';
+
+  // Draw plate with shape clip
+  fCtx.save();
+  clipPlate(fCtx);
+  fCtx.drawImage(offscreen, plateX, plateY, plateSize, plateSize);
+
+  // Plate border glow
+  fCtx.restore();
+  fCtx.save();
+  fCtx.strokeStyle = `rgba(${pal.glow[0]},${pal.glow[1]},${pal.glow[2]},0.15)`;
+  fCtx.lineWidth = 2;
+  strokePlate(fCtx);
+  fCtx.restore();
+
+  // Subtle vignette
+  const vg = fCtx.createRadialGradient(W/2, H/2, plateSize * 0.3, W/2, H/2, W * 0.7);
+  vg.addColorStop(0, 'rgba(0,0,0,0)');
+  vg.addColorStop(1, `rgba(${bg[0]},${bg[1]},${bg[2]},0.6)`);
+  fCtx.fillStyle = vg;
+  fCtx.fillRect(0, 0, W, H);
+}
+
+// ——— Particles ———
+function initParticles() {
+  particles = [];
+  for (let i = 0; i < state.particleCount; i++) {
+    let x, y;
+    if (state.plateShape === 'circle') {
+      // Uniform distribution in circle
+      do {
+        x = Math.random();
+        y = Math.random();
+      } while ((x - 0.5) * (x - 0.5) + (y - 0.5) * (y - 0.5) > 0.25);
+    } else {
+      x = Math.random();
+      y = Math.random();
+    }
+    particles.push({ x, y, vx: 0, vy: 0 });
+  }
+}
+
+function updateParticles(dt) {
+  const { n, m, amp, freq, force } = state;
+  const damping = 0.92;
+  const noiseAmt = 0.0003;
+  const maxSpeed = 0.015;
+  const forceScale = force * 0.0008;
+
+  // Vibration phase creates oscillating force
+  const phase = Math.sin(time * freq * 2);
+  const vibrationForce = amp * phase;
+
+  for (let i = 0; i < particles.length; i++) {
+    const p = particles[i];
+
+    // Gradient of the Chladni function — particles move toward nodal lines
+    const [gx, gy] = chladniGrad(p.x, p.y, n, m);
+    const val = chladni(p.x, p.y, n, m);
+
+    // Force pushes particles toward nodal lines (val = 0)
+    // The sign of val determines which direction to push
+    const pushX = -gx * val * forceScale * Math.abs(vibrationForce);
+    const pushY = -gy * val * forceScale * Math.abs(vibrationForce);
+
+    // Add small vibration jitter proportional to amplitude at this point
+    const jitterScale = Math.abs(val) * amp * 0.002;
+    const jx = (Math.random() - 0.5) * jitterScale;
+    const jy = (Math.random() - 0.5) * jitterScale;
+
+    p.vx = (p.vx + pushX + jx) * damping;
+    p.vy = (p.vy + pushY + jy) * damping;
+
+    // Clamp speed
+    const speed = Math.sqrt(p.vx * p.vx + p.vy * p.vy);
+    if (speed > maxSpeed) {
+      p.vx = (p.vx / speed) * maxSpeed;
+      p.vy = (p.vy / speed) * maxSpeed;
+    }
+
+    p.x += p.vx;
+    p.y += p.vy;
+
+    // Bounce off edges
+    bounceParticle(p);
+  }
+}
+
+function renderParticles() {
+  pCtx.clearRect(0, 0, W, H);
+  if (!state.showParticles) return;
+
+  const pal = PALETTES[state.paletteIdx];
+  const pc = pal.particle;
+
+  if (state.showGlow) {
+    // Accumulate into density map then render with glow
+    const res = Math.min(Math.floor(plateSize), 512);
+    const density = new Float32Array(res * res);
+    const step = 1 / res;
+
+    for (let i = 0; i < particles.length; i++) {
+      const p = particles[i];
+      const ix = Math.floor(p.x * (res - 1));
+      const iy = Math.floor(p.y * (res - 1));
+      if (ix >= 0 && ix < res && iy >= 0 && iy < res) {
+        density[iy * res + ix] += 1;
+      }
+    }
+
+    // Simple 3x3 blur
+    const blurred = new Float32Array(res * res);
+    for (let y = 1; y < res - 1; y++) {
+      for (let x = 1; x < res - 1; x++) {
+        let sum = 0;
+        for (let dy = -1; dy <= 1; dy++) {
+          for (let dx = -1; dx <= 1; dx++) {
+            sum += density[(y + dy) * res + (x + dx)];
+          }
+        }
+        blurred[y * res + x] = sum / 9;
+      }
+    }
+
+    const imageData = pCtx.createImageData(res, res);
+    const data = imageData.data;
+    const maxDensity = Math.max(3, ...blurred) * 0.5;
+
+    for (let y = 0; y < res; y++) {
+      for (let x = 0; x < res; x++) {
+        const d = blurred[y * res + x] / maxDensity;
+        const idx = (y * res + x) * 4;
+        if (d > 0.01) {
+          const bright = Math.min(d, 1);
+          const glow = Math.pow(bright, 0.6);
+          data[idx] = pc[0] * glow;
+          data[idx + 1] = pc[1] * glow;
+          data[idx + 2] = pc[2] * glow;
+          data[idx + 3] = Math.min(255, bright * 300);
+        }
+      }
+    }
+
+    const offscreen = document.createElement('canvas');
+    offscreen.width = res;
+    offscreen.height = res;
+    offscreen.getContext('2d').putImageData(imageData, 0, 0);
+
+    pCtx.save();
+    pCtx.imageSmoothingEnabled = true;
+    pCtx.globalCompositeOperation = 'lighter';
+    clipPlate(pCtx);
+    pCtx.drawImage(offscreen, plateX, plateY, plateSize, plateSize);
+
+    // Extra glow pass
+    pCtx.globalAlpha = 0.4;
+    pCtx.filter = 'blur(4px)';
+    pCtx.drawImage(offscreen, plateX, plateY, plateSize, plateSize);
+    pCtx.filter = 'none';
+    pCtx.globalAlpha = 1;
+    pCtx.restore();
+  } else {
+    // Direct particle rendering via offscreen pixel buffer
+    const res = Math.min(Math.floor(plateSize), 800);
+    const density = new Uint16Array(res * res);
+
+    for (let i = 0; i < particles.length; i++) {
+      const p = particles[i];
+      const ix = Math.floor(p.x * (res - 1));
+      const iy = Math.floor(p.y * (res - 1));
+      if (ix >= 0 && ix < res && iy >= 0 && iy < res) {
+        density[iy * res + ix]++;
+      }
+    }
+
+    const imageData = pCtx.createImageData(res, res);
+    const data = imageData.data;
+
+    for (let y = 0; y < res; y++) {
+      for (let x = 0; x < res; x++) {
+        const d = density[y * res + x];
+        if (d > 0) {
+          const bright = Math.min(d / 3, 1);
+          const idx = (y * res + x) * 4;
+          data[idx] = pc[0] * bright;
+          data[idx + 1] = pc[1] * bright;
+          data[idx + 2] = pc[2] * bright;
+          data[idx + 3] = Math.min(255, d * 80 + 60);
+        }
+      }
+    }
+
+    const offscreen = document.createElement('canvas');
+    offscreen.width = res;
+    offscreen.height = res;
+    offscreen.getContext('2d').putImageData(imageData, 0, 0);
+
+    pCtx.save();
+    clipPlate(pCtx);
+    pCtx.imageSmoothingEnabled = false;
+    pCtx.drawImage(offscreen, plateX, plateY, plateSize, plateSize);
+    pCtx.restore();
+  }
+}
+
+// ——— Interaction ———
+let pointerDown = false;
+let pointerX = 0, pointerY = 0;
+
+function disturb(cx, cy, radius) {
+  const r2 = radius * radius;
+  for (let i = 0; i < particles.length; i++) {
+    const p = particles[i];
+    const dx = p.x - cx;
+    const dy = p.y - cy;
+    const d2 = dx * dx + dy * dy;
+    if (d2 < r2 && d2 > 0.0001) {
+      const d = Math.sqrt(d2);
+      const force = (1 - d / radius) * 0.01;
+      p.vx += (dx / d) * force;
+      p.vy += (dy / d) * force;
+    }
+  }
+}
+
+particleCanvas.addEventListener('pointerdown', (e) => {
+  // Don't interact if clicking panel
+  if (e.target !== particleCanvas) return;
+  pointerDown = true;
+  const rect = particleCanvas.getBoundingClientRect();
+  pointerX = (e.clientX - rect.left - plateX) / plateSize;
+  pointerY = (e.clientY - rect.top - plateY) / plateSize;
+  if (pointerX >= 0 && pointerX <= 1 && pointerY >= 0 && pointerY <= 1) {
+    disturb(pointerX, pointerY, 0.15);
+  }
+});
+
+particleCanvas.addEventListener('pointermove', (e) => {
+  if (!pointerDown) return;
+  const rect = particleCanvas.getBoundingClientRect();
+  pointerX = (e.clientX - rect.left - plateX) / plateSize;
+  pointerY = (e.clientY - rect.top - plateY) / plateSize;
+  if (pointerX >= 0 && pointerX <= 1 && pointerY >= 0 && pointerY <= 1) {
+    disturb(pointerX, pointerY, 0.1);
+  }
+});
+
+particleCanvas.addEventListener('pointerup', () => { pointerDown = false; });
+particleCanvas.addEventListener('pointercancel', () => { pointerDown = false; });
+
+// ——— UI ———
+function buildPresets() {
+  const container = document.getElementById('presets');
+  container.innerHTML = '';
+  PRESETS.forEach((pr, i) => {
+    const btn = document.createElement('button');
+    btn.className = 'preset-btn' + (i === state.activePreset ? ' active' : '');
+    btn.textContent = pr.name;
+    btn.onclick = () => applyPreset(i);
+    container.appendChild(btn);
+  });
+}
+
+function applyPreset(idx) {
+  const pr = PRESETS[idx];
+  state.n = pr.n;
+  state.m = pr.m;
+  state.amp = pr.amp;
+  state.freq = pr.freq;
+  state.activePreset = idx;
+
+  document.getElementById('nSlider').value = pr.n;
+  document.getElementById('mSlider').value = pr.m;
+  document.getElementById('ampSlider').value = pr.amp;
+  document.getElementById('freqSlider').value = pr.freq;
+  updateSliderDisplays();
+  renderField();
+  buildPresets();
+}
+
+function buildPalettes() {
+  const container = document.getElementById('palettes');
+  container.innerHTML = '';
+  PALETTES.forEach((pal, i) => {
+    const swatch = document.createElement('div');
+    swatch.className = 'palette-swatch' + (i === state.paletteIdx ? ' active' : '');
+    const fc = pal.field;
+    swatch.style.background = `linear-gradient(135deg, rgb(${fc[1].join(',')}), rgb(${fc[3].join(',')}))`;
+    swatch.title = pal.name;
+    swatch.onclick = () => {
+      state.paletteIdx = i;
+      renderField();
+      buildPalettes();
+    };
+    container.appendChild(swatch);
+  });
+}
+
+function updateSliderDisplays() {
+  document.getElementById('nVal').textContent = state.n;
+  document.getElementById('mVal').textContent = state.m;
+  document.getElementById('ampVal').textContent = state.amp.toFixed(1);
+  document.getElementById('freqVal').textContent = state.freq.toFixed(1);
+  document.getElementById('countVal').textContent = (state.particleCount / 1000).toFixed(0) + 'K';
+  document.getElementById('forceVal').textContent = state.force.toFixed(1);
+  document.getElementById('infoN').textContent = state.n;
+  document.getElementById('infoM').textContent = state.m;
+  document.getElementById('infoCount').textContent = (state.particleCount / 1000).toFixed(0) + 'K';
+}
+
+// Slider bindings
+document.getElementById('nSlider').oninput = function() {
+  state.n = +this.value; state.activePreset = -1;
+  updateSliderDisplays(); renderField(); buildPresets();
+};
+document.getElementById('mSlider').oninput = function() {
+  state.m = +this.value; state.activePreset = -1;
+  updateSliderDisplays(); renderField(); buildPresets();
+};
+document.getElementById('ampSlider').oninput = function() {
+  state.amp = +this.value; state.activePreset = -1;
+  updateSliderDisplays(); buildPresets();
+};
+document.getElementById('freqSlider').oninput = function() {
+  state.freq = +this.value; state.activePreset = -1;
+  updateSliderDisplays(); buildPresets();
+};
+document.getElementById('countSlider').oninput = function() {
+  state.particleCount = +this.value;
+  updateSliderDisplays();
+  initParticles();
+};
+document.getElementById('forceSlider').oninput = function() {
+  state.force = +this.value;
+  updateSliderDisplays();
+};
+
+// Shape toggles
+document.getElementById('shapeSquare').onclick = function() {
+  state.plateShape = 'square';
+  this.classList.add('on');
+  document.getElementById('shapeCircle').classList.remove('on');
+  renderField();
+  initParticles();
+};
+document.getElementById('shapeCircle').onclick = function() {
+  state.plateShape = 'circle';
+  this.classList.add('on');
+  document.getElementById('shapeSquare').classList.remove('on');
+  renderField();
+  initParticles();
+};
+
+// Toggles
+document.getElementById('toggleField').onclick = function() {
+  state.showField = !state.showField;
+  this.classList.toggle('on', state.showField);
+  renderField();
+};
+document.getElementById('toggleParticles').onclick = function() {
+  state.showParticles = !state.showParticles;
+  this.classList.toggle('on', state.showParticles);
+};
+document.getElementById('toggleGlow').onclick = function() {
+  state.showGlow = !state.showGlow;
+  this.classList.toggle('on', state.showGlow);
+};
+
+// Buttons
+document.getElementById('resetBtn').onclick = () => initParticles();
+
+document.getElementById('exportBtn').onclick = () => {
+  const sz = 2048;
+  const exportCanvas = document.createElement('canvas');
+  exportCanvas.width = sz;
+  exportCanvas.height = sz;
+  const ctx = exportCanvas.getContext('2d');
+
+  // Render field at export resolution
+  const pal = PALETTES[state.paletteIdx];
+  const bg = pal.bg;
+  ctx.fillStyle = `rgb(${bg[0]},${bg[1]},${bg[2]})`;
+  ctx.fillRect(0, 0, sz, sz);
+
+  if (state.showField) {
+    const imageData = ctx.createImageData(sz, sz);
+    const data = imageData.data;
+    for (let iy = 0; iy < sz; iy++) {
+      for (let ix = 0; ix < sz; ix++) {
+        const x = ix / sz, y = iy / sz;
+        const val = chladni(x, y, state.n, state.m);
+        const absVal = Math.abs(val);
+        const norm = Math.min(absVal / 2, 1);
+        const fc = pal.field;
+        let r, g, b2;
+        if (norm < 0.33) { const t = norm / 0.33; r = fc[0][0]+(fc[1][0]-fc[0][0])*t; g = fc[0][1]+(fc[1][1]-fc[0][1])*t; b2 = fc[0][2]+(fc[1][2]-fc[0][2])*t; }
+        else if (norm < 0.66) { const t = (norm-0.33)/0.33; r = fc[1][0]+(fc[2][0]-fc[1][0])*t; g = fc[1][1]+(fc[2][1]-fc[1][1])*t; b2 = fc[1][2]+(fc[2][2]-fc[1][2])*t; }
+        else { const t = (norm-0.66)/0.34; r = fc[2][0]+(fc[3][0]-fc[2][0])*t; g = fc[2][1]+(fc[3][1]-fc[2][1])*t; b2 = fc[2][2]+(fc[3][2]-fc[2][2])*t; }
+        const f2 = 0.15 + 0.85 * Math.min(absVal * 3, 1);
+        const idx = (iy * sz + ix) * 4;
+        data[idx] = r * f2; data[idx+1] = g * f2; data[idx+2] = b2 * f2; data[idx+3] = 255;
+      }
+    }
+    ctx.putImageData(imageData, 0, 0);
+  }
+
+  if (state.showParticles) {
+    const pc = pal.particle;
+    const imageData = ctx.getImageData(0, 0, sz, sz);
+    const data = imageData.data;
+    for (let i = 0; i < particles.length; i++) {
+      const p = particles[i];
+      const sx = Math.floor(p.x * (sz - 1));
+      const sy = Math.floor(p.y * (sz - 1));
+      if (sx >= 0 && sx < sz && sy >= 0 && sy < sz) {
+        const idx = (sy * sz + sx) * 4;
+        data[idx] = Math.min(255, data[idx] + pc[0] * 0.8);
+        data[idx+1] = Math.min(255, data[idx+1] + pc[1] * 0.8);
+        data[idx+2] = Math.min(255, data[idx+2] + pc[2] * 0.8);
+        data[idx+3] = 255;
+      }
+    }
+    ctx.putImageData(imageData, 0, 0);
+  }
+
+  // Mask to circle if needed
+  if (state.plateShape === 'circle') {
+    ctx.globalCompositeOperation = 'destination-in';
+    ctx.beginPath();
+    ctx.arc(sz/2, sz/2, sz/2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalCompositeOperation = 'source-over';
+  }
+
+  // Watermark
+  ctx.font = '24px SF Mono, monospace';
+  ctx.fillStyle = `rgba(${pal.glow[0]},${pal.glow[1]},${pal.glow[2]},0.3)`;
+  ctx.textAlign = 'right';
+  ctx.fillText(`Chladni (${state.n}, ${state.m})`, sz - 24, sz - 24);
+
+  const link = document.createElement('a');
+  link.download = `chladni-${state.n}-${state.m}.png`;
+  link.href = exportCanvas.toDataURL('image/png');
+  link.click();
+};
+
+document.getElementById('helpBtn').onclick = () => {
+  document.getElementById('helpOverlay').classList.add('visible');
+};
+
+document.getElementById('helpOverlay').onclick = () => {
+  document.getElementById('helpOverlay').classList.remove('visible');
+};
+
+// Keyboard shortcuts
+document.addEventListener('keydown', (e) => {
+  if (e.target.tagName === 'INPUT') return;
+  const key = e.key.toLowerCase();
+  if (key >= '1' && key <= '8') {
+    applyPreset(+key - 1);
+  } else if (key === ' ') {
+    e.preventDefault();
+    initParticles();
+  } else if (key === 'f') {
+    state.showField = !state.showField;
+    document.getElementById('toggleField').classList.toggle('on', state.showField);
+    renderField();
+  } else if (key === 'p') {
+    state.showParticles = !state.showParticles;
+    document.getElementById('toggleParticles').classList.toggle('on', state.showParticles);
+  } else if (key === 'g') {
+    state.showGlow = !state.showGlow;
+    document.getElementById('toggleGlow').classList.toggle('on', state.showGlow);
+  } else if (key === 'e') {
+    document.getElementById('exportBtn').click();
+  } else if (key === 's') {
+    state.plateShape = state.plateShape === 'square' ? 'circle' : 'square';
+    document.getElementById('shapeSquare').classList.toggle('on', state.plateShape === 'square');
+    document.getElementById('shapeCircle').classList.toggle('on', state.plateShape === 'circle');
+    renderField();
+    initParticles();
+  } else if (key === 'h' || key === '?') {
+    document.getElementById('helpOverlay').classList.toggle('visible');
+  } else if (key === '[') {
+    state.paletteIdx = (state.paletteIdx - 1 + PALETTES.length) % PALETTES.length;
+    renderField(); buildPalettes();
+  } else if (key === ']') {
+    state.paletteIdx = (state.paletteIdx + 1) % PALETTES.length;
+    renderField(); buildPalettes();
+  }
+});
+
+// Mobile panel drag
+const panel = document.getElementById('panel');
+const dragHandle = document.getElementById('dragHandle');
+let panelOpen = false;
+
+dragHandle.addEventListener('pointerdown', (e) => {
+  e.stopPropagation();
+  panelOpen = !panelOpen;
+  panel.classList.toggle('open', panelOpen);
+});
+
+// ——— Animation loop ———
+function animate(timestamp) {
+  if (!lastTime) lastTime = timestamp;
+  const dt = Math.min((timestamp - lastTime) / 1000, 0.05);
+  lastTime = timestamp;
+  time += dt;
+
+  // FPS counter
+  frameCount++;
+  if (timestamp - fpsTime > 500) {
+    fps = Math.round(frameCount / ((timestamp - fpsTime) / 1000));
+    document.getElementById('infoFPS').textContent = fps;
+    frameCount = 0;
+    fpsTime = timestamp;
+  }
+
+  // Update physics (multiple substeps for stability)
+  const steps = 3;
+  for (let s = 0; s < steps; s++) {
+    updateParticles(dt / steps);
+  }
+
+  renderParticles();
+  requestAnimationFrame(animate);
+}
+
+// ——— Init ———
+resize();
+buildPresets();
+buildPalettes();
+updateSliderDisplays();
+initParticles();
+requestAnimationFrame(animate);
+window.addEventListener('resize', resize);
+
+</script>
+</body>
+</html>
